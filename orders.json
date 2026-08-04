@@ -1,0 +1,15 @@
+[
+  {
+    "id": 1,
+    "products": [
+      {
+        "productId": 1,
+        "name": "laptop",
+        "price": 70000,
+        "quantity": 1
+      }
+    ],
+    "totalPrice": 70000,
+    "date": "2026-08-03T09:01:39.163Z"
+  }
+]
