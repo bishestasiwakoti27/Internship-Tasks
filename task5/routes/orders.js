@@ -4,9 +4,10 @@ const router = express.Router();
 
 const Product = require("../models/Product");
 const Order = require("../models/Order");
+const User = require("../models/User");
 
-const transporter = require("../config/email");
-//
+const { emailQueue } = require("../queues/emailQueue");
+
 // CREATE ORDER / CHECKOUT
 // POST /orders
 //
@@ -48,6 +49,17 @@ const transporter = require("../config/email");
 router.post("/", jwtAuth, async (req, res) => {
   try {
     const { customer_name, products } = req.body;
+
+    if (
+      !customer_name ||
+      !products ||
+      !Array.isArray(products) ||
+      products.length === 0
+    ) {
+      return res.status(400).json({
+        message: "customer_name and products are required",
+      });
+    }
 
     let totalPrice = 0;
 
@@ -102,7 +114,7 @@ router.post("/", jwtAuth, async (req, res) => {
     const savedOrder = await order.save();
 
     // ==========================================
-    // SEND INVOICE EMAIL
+    // CREATE INVOICE HTML
     // ==========================================
 
     const productDetails = [];
@@ -112,13 +124,13 @@ router.post("/", jwtAuth, async (req, res) => {
 
       if (product) {
         productDetails.push(`
-          <tr>
-            <td>${product.name}</td>
-            <td>${item.quantity}</td>
-            <td>Rs. ${product.price}</td>
-            <td>Rs. ${product.price * item.quantity}</td>
-          </tr>
-        `);
+      <tr>
+        <td>${product.name}</td>
+        <td>${item.quantity}</td>
+        <td>Rs. ${product.price}</td>
+        <td>Rs. ${product.price * item.quantity}</td>
+      </tr>
+    `);
       }
     }
 
@@ -127,47 +139,59 @@ router.post("/", jwtAuth, async (req, res) => {
       to: user.email,
       subject: `Invoice for Order ${savedOrder._id}`,
       html: `
-        <h2>Shopping API - Invoice</h2>
+    <h2>Shopping API - Invoice</h2>
 
-        <p>Hello ${customer_name},</p>
+    <p>Hello ${customer_name},</p>
 
-        <p>Thank you for your order!</p>
+    <p>Thank you for your order!</p>
 
-        <p>
-          <strong>Order ID:</strong> ${savedOrder._id}
-        </p>
+    <p>
+      <strong>Order ID:</strong> ${savedOrder._id}
+    </p>
 
-        <table border="1" cellpadding="10" cellspacing="0">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Quantity</th>
-              <th>Price</th>
-              <th>Total</th>
-            </tr>
-          </thead>
+    <table border="1" cellpadding="10" cellspacing="0">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Quantity</th>
+          <th>Price</th>
+          <th>Total</th>
+        </tr>
+      </thead>
 
-          <tbody>
-            ${productDetails.join("")}
-          </tbody>
-        </table>
+      <tbody>
+        ${productDetails.join("")}
+      </tbody>
+    </table>
 
-        <h3>Total Amount: Rs. ${totalPrice}</h3>
+    <h3>Total Amount: Rs. ${totalPrice}</h3>
 
-        <p>Thank you for shopping with us.</p>
-      `,
+    <p>Thank you for shopping with us.</p>
+  `,
     };
 
-    await transporter.sendMail(mailOptions);
+    // Add invoice email to BullMQ
+    await emailQueue.add("invoice-email", {
+      to: user.email,
+      subject: `Invoice for Order ${savedOrder._id}`,
+      html: mailOptions.html,
+    });
+
+    res.status(201).json({
+      message: "Order placed successfully. Invoice email added to queue.",
+      order: savedOrder,
+      invoiceEmail: user.email,
+    });
 
     // ==========================================
     // RESPONSE
     // ==========================================
 
     res.status(201).json({
-      message: "Order Placed Successfully and Invoice Sent",
+      message: "Order Placed Successfully. Invoice Email Queued.",
       order: savedOrder,
       invoiceEmail: user.email,
+      emailJobId: emailJob.id,
     });
   } catch (err) {
     console.log("Checkout Error:", err);

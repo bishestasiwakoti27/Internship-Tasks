@@ -6,10 +6,20 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
 
 const app = express();
-
+const helmet = require("helmet");
+const cors = require("cors");
+const mongoSanitize = require("express-mongo-sanitize");
 connectDB();
 
+app.use(helmet());
+app.use(cors());
 app.use(express.json());
+app.use(mongoSanitize());
+
+app.use(express.json());
+const path = require("path");
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const userRoutes = require("./routes/users");
 const productRoutes = require("./routes/products");

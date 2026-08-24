@@ -8,7 +8,8 @@ const jwt = require("jsonwebtoken");
 
 const basicAuth = require("../middleware/auth");
 const jwtAuth = require("../middleware/jwtAuth");
-
+const uploadToCloudinary = require("../config/uploadToCloudinary");
+const upload = require("../middleware/upload");
 // =====================================================
 // GET ALL USERS
 // GET /users
@@ -124,9 +125,10 @@ router.get("/profile", basicAuth, async (req, res) => {
  *         description: Server error
  */
 
-router.post("/login", async (req, res) => {
+router.post("/", upload.single("image"), async (req, res) => {
   try {
     const { username, password } = req.body;
+    let image = null;
 
     // Validate input
     if (!username || !password) {
@@ -143,7 +145,24 @@ router.post("/login", async (req, res) => {
         message: "Invalid username or password",
       });
     }
+    let image = null;
 
+    if (req.file) {
+      const result = await uploadToCloudinary(
+        req.file.buffer,
+        "shopping-api/users",
+      );
+
+      image = result.secure_url;
+    }
+
+    const user = new User({
+      name,
+      email,
+      username,
+      password: hashedPassword,
+      image,
+    });
     // Compare password with hashed password
     const passwordMatch = await bcrypt.compare(password, user.password);
 
@@ -308,7 +327,7 @@ router.get("/:id", jwtAuth, async (req, res) => {
  *         description: Server error
  */
 
-router.post("/", async (req, res) => {
+router.post("/", upload.single("image"), async (req, res) => {
   try {
     const { name, email, username, password, image } = req.body;
 
@@ -317,6 +336,16 @@ router.post("/", async (req, res) => {
       return res.status(400).json({
         message: "Name, email, username and password are required",
       });
+    }
+    let image = null;
+
+    if (req.file) {
+      const result = await uploadToCloudinary(
+        req.file.buffer,
+        "shopping-api/users",
+      );
+
+      image = result.secure_url;
     }
 
     // Check username

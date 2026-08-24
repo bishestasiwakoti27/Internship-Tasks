@@ -1,9 +1,10 @@
 const jwtAuth = require("../middleware/jwtAuth");
 const express = require("express");
 const router = express.Router();
-
+const upload = require("../middleware/upload");
 const Product = require("../models/Product");
-
+const upload = require("../middleware/upload");
+const uploadToCloudinary = require("../config/uploadToCloudinary");
 /**
  * @swagger
  * /products:
@@ -27,6 +28,7 @@ router.get("/", jwtAuth, async (req, res) => {
       "store",
       "name logo type location",
     );
+    const image = req.file ? `/uploads/${req.file.filename}` : null;
 
     res.json(products);
   } catch (err) {
@@ -447,7 +449,7 @@ router.get("/:id", jwtAuth, async (req, res) => {
  *       400:
  *         description: Invalid product data
  */
-router.post("/", jwtAuth, async (req, res) => {
+router.post("/", jwtAuth, upload.single("image"), async (req, res) => {
   try {
     const product = new Product({
       name: req.body.name,
@@ -460,6 +462,16 @@ router.post("/", jwtAuth, async (req, res) => {
       image: req.body.image,
       store: req.body.store,
     });
+    let image = null;
+
+    if (req.file) {
+      const result = await uploadToCloudinary(
+        req.file.buffer,
+        "shopping-api/products",
+      );
+
+      image = result.secure_url;
+    }
 
     const savedProduct = await product.save();
 
